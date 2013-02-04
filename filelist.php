@@ -3,8 +3,7 @@
  * Script to get list of files and file comparison
  *
  * @version		2013.02.04
- * @author  Fedik
- * @email	getthesite@gmail.com
+ * @author   Fedik <getthesite at gmail dot com>
  * @link    http://www.getsite.org.ua
  * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
  */
