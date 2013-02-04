@@ -237,6 +237,7 @@ if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
 	$files_old = unserialize($stored_map);
 	//var_dump(max(count($files), count($files_old)));
 
+	//find changed and new
 	foreach ($files as $n => &$f) {
 		if (empty($files_old[$n])) {
 			$f['state'] = 3;
@@ -249,6 +250,13 @@ if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
 		$f['state'] = 1;
 	}
 	unset($f);
+	//find removed
+	foreach ($files_old as $n => $f) {
+		if (empty($files[$n])) {
+			$files[$n] = $f;
+			$files[$n]['state'] = 4;
+		}
+	}
 	$time_exec['Comparison'] = getmicrotime();
 }
 
@@ -258,21 +266,18 @@ $time_exec['Sorting'] = getmicrotime();
 $files_total = count($files);
 
 //cut by pager
-if ($pager_limit) {
+if ($pager_limit && $files_total > $pager_limit) {
 	$pager_start = $pager_limit * $page;
 	$files =  array_slice($files, $pager_start, $pager_limit);
 
 	//build pager
-	if($files_total > $pager_limit) {
-		$pages_total = round($files_total/$pager_limit, 0, PHP_ROUND_HALF_DOWN);
-		$pager .= '<a href="?'.buildUrlQuery(array('page' => 1), true).'"><< First</a>&nbsp;...&nbsp;';
-		//5 prev and 5 next
-		for($i = max(1, $page - 5); $i <= min($page + 5, $pages_total); $i++){
-			$pager .= '<a href="?'.buildUrlQuery(array('page' => $i), true).'">'.$i.'</a>';
-		}
-		$pager .= '&nbsp;...&nbsp;<a href="?'.buildUrlQuery(array('page' => $pages_total), true).'">Last >></a>';
-		//$pager .= '&nbsp;Total: '.$pages_total;
+	$pages_total = round($files_total/$pager_limit, 0, PHP_ROUND_HALF_DOWN);
+	$pager .= '<a href="?'.buildUrlQuery(array('page' => 1), true).'"><< First</a>&nbsp;...&nbsp;';
+	//5 prev and 5 next
+	for($i = max(1, $page - 5); $i <= min($page + 5, $pages_total); $i++){
+		$pager .= '<a href="?'.buildUrlQuery(array('page' => $i), true).'">'.$i.'</a>';
 	}
+	$pager .= '&nbsp;...&nbsp;<a href="?'.buildUrlQuery(array('page' => $pages_total), true).'">Last >></a>';
 }
 
 //render table
