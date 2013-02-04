@@ -1,4 +1,13 @@
 <?php
+/**
+ * Script to get list of files and file comparison
+ *
+ * @version		2013.02.04
+ * @author  Fedik
+ * @email	getthesite@gmail.com
+ * @link    http://www.getsite.org.ua
+ * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
+ */
 
 //base options
 
@@ -6,7 +15,7 @@ $path = '.'; //The path of the folder to read.
 $recurse = true; //True to recursively search into sub-folders, or an integer to specify the maximum depth.
 $filter = '.'; //A filter for file names. Regexp.
 $exclude = array('.svn', '.git', 'CVS', '.DS_Store', '__MACOSX'); //Array with names of files which should not be shown in the result.
-$excludefilter_string = '/(^\..*|.*~|\.ini$|\.gif$|\.jpg$|\.jpeg$|\.png$)/i'; //Regexp of files to exclude '/(^\..*|.*~|\.ini$)/'
+$excludefilter_string = '/(^\..*|.*~|\.gif$|\.jpg$|\.jpeg$|\.png$)/i'; //Regexp of files to exclude '/(^\..*|.*~|\.ini$)/'
 $findfiles = true; //True to read the files, false to read the folders
 $full = true; //True to return the full info about the file.
 $map_file_name = 'files_map';
@@ -143,6 +152,7 @@ function formatBytes($bytes, $precision = 2) {
 /**
  * State format
  * 1 = same, 2 = changed, 3 = new, 4 = removed
+ * @return HTML string
  */
 function stateFormat($state) {
 	$title = 'unknown';
@@ -235,7 +245,6 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 //'state' => 1.same, 2.changed, 3.new, 4.removed
 if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
 	$files_old = unserialize($stored_map);
-	//var_dump(max(count($files), count($files_old)));
 
 	//find changed and new
 	foreach ($files as $n => &$f) {
