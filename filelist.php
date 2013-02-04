@@ -2,9 +2,9 @@
 
 //base options
 
-$path = '..'; //The path of the folder to read.
+$path = '.'; //The path of the folder to read.
 $recurse = true; //True to recursively search into sub-folders, or an integer to specify the maximum depth.
-$filter = '.'; //A filter for file names.
+$filter = '.'; //A filter for file names. Regexp.
 $exclude = array('.svn', '.git', 'CVS', '.DS_Store', '__MACOSX'); //Array with names of files which should not be shown in the result.
 $excludefilter_string = '/(^\..*|.*~|\.ini$|\.gif$|\.jpg$|\.jpeg$|\.png$)/i'; //Regexp of files to exclude '/(^\..*|.*~|\.ini$)/'
 $findfiles = true; //True to read the files, false to read the folders
@@ -71,8 +71,7 @@ function getItems(
 					'ctime'	=> $stat['ctime'], //time of last inode change (Unix timestamp)
 					'mode' => $stat['mode'], //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
 					'hash' => '',
-					//'hash_old' => '',
-					'hash_dif' => '',//0.same;1.changed;2.new;3.removed
+					'state' => '',//1.same;2.changed;3.new;4.removed
 				);
 
 				if ($full){
@@ -142,6 +141,29 @@ function formatBytes($bytes, $precision = 2) {
 	return round($bytes, $precision) . ' ' . $units[$pow];
 }
 /**
+ * State format
+ * 1 = same, 2 = changed, 3 = new, 4 = removed
+ */
+function stateFormat($state) {
+	$title = 'unknown';
+	switch ($state){
+		case 1:
+			$title = 'same';
+			break;
+		case 2:
+			$title = 'changed';
+			break;
+		case 3:
+			$title = 'new';
+			break;
+		case 4:
+			$title = 'removed';
+			break;
+	}
+
+	return '<span class="'.$title.'">'.$title.'</span>';
+}
+/**
  * build query
  * @return new query array or query string
  */
@@ -185,9 +207,7 @@ $table_head = array(
 	'mtime' => 'Last modification',
 	'ctime' => 'Last inode change',
 	'mode' => 'Permissions',
-	//'hash' => 'Current Hash',
-	//'hash_old' => 'Old Hash',
-	'hash_dif' => 'File state'
+	'state' => 'File state'
 );
 
 //prepare base URL query
@@ -197,6 +217,7 @@ if (isset($_GET['scan'])) {
 }
 if ($scan && isset($_GET['hashcompare'])) {
 	unset($_GET['hashcompare']);
+	$hashcompare = false;
 }
 
 //run
@@ -211,21 +232,21 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 	$time_exec['Scan Files'] = getmicrotime();
 }
 
-//'hash_dif' => 0.same, 1.changed, 2.new, 3.removed
+//'state' => 1.same, 2.changed, 3.new, 4.removed
 if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
 	$files_old = unserialize($stored_map);
 	//var_dump(max(count($files), count($files_old)));
 
 	foreach ($files as $n => &$f) {
 		if (empty($files_old[$n])) {
-			$f['hash_dif'] = '2.new';
+			$f['state'] = 3;
 			continue;
 		}
 		if ($f['hash'] != $files_old[$n]['hash']) {
-			$f['hash_dif'] = '1.changed';
+			$f['state'] = 2;
 			continue;
 		}
-		$f['hash_dif'] = '0.same';
+		$f['state'] = 1;
 	}
 	unset($f);
 	$time_exec['Comparison'] = getmicrotime();
@@ -288,6 +309,9 @@ if($files_total) {
 				case 'mode':
 					$table .= '<td>'.base_convert($file[$col],10,8).'</td>';
 					break;
+				case 'state':
+					$table .= '<td>'.stateFormat($file[$col]).'</td>';
+					break;
 				default:
 					$table .= '<td>'.$file[$col].'</td>';;
 					break;
@@ -302,13 +326,13 @@ if($files_total) {
 }
 
 //render stored map files list for hashcompare
-$maps = getItems('.', false,  base64_encode($path).'\.map$', array($map_file), null, true, false);
+$maps = getItems('.', false,  '('.base64_encode($path).'|'.$map_file_name.')\.map$', array(), null, true, false);
 rsort($maps);
 $tmp_arr = array();
 foreach ($maps as $map) {
 	$tmp_arr[] = '<li>'.$map['filename']. '&nbsp;'
-		.'<a href="?'.buildUrlQuery(array('sort' => 'hash_dif', 'dir' => 'desc', 'hashcompare' => $map['filename']), true).'">Compare</a>&nbsp;'
-		.'<a href="?'.buildUrlQuery(array('sort' => 'path', 'dir' => 'asc', 'hashcompare' => '', 'filelist' => $map['filename']), true).'">Open</a>'
+		.'<a href="?'.buildUrlQuery(array('sort' => 'state', 'dir' => 'desc', 'hashcompare' => $map['filename']), true).'">Compare</a>&nbsp;'
+		.'<a href="?'.buildUrlQuery(array('sort' => 'path', 'dir' => 'desc', 'page' => 1, 'hashcompare' => '', 'filelist' => $map['filename']), true).'">Open</a>'
 		.'</li>';
 }
 $stored_maps = '<ul>'.implode('', $tmp_arr).'</ul>';
@@ -351,14 +375,17 @@ table tr:hover{
 	padding: 3px;
 	margin-right: 3px;
 }
-
+span.new,
+span.changed,
+span.removed {color: #bf1122;}
+span.same{ color: #009159}
 </style>
 </head>
 <body>
 <div id="files-table">
 <p>Files total: <?php echo $files_total;?><br />
 Base path: <?php echo realpath($path);?><br />
-<a href="?<?php echo buildUrlQuery(array('scan' => true), true); ?>">Scan again</a></p>
+<a href="?<?php echo buildUrlQuery(array('scan' => true, 'hashcompare' => ''), true); ?>">Scan again</a></p>
 <p>map file: <b><?php echo $map_file_current; ?></b>
 <?php if ($hashcompare): ?> vs <b><?php echo $hashcompare; ?></b> <?php endif; ?>
 </p>
