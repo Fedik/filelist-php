@@ -2,7 +2,7 @@
 /**
  * Script to get list of files and file comparison
  *
- * @version		2013.02.04
+ * @version		2013.02.06
  * @author   Fedik <getthesite at gmail dot com>
  * @link    http://www.getsite.org.ua
  * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
@@ -17,9 +17,10 @@ $exclude = array('.svn', '.git', 'CVS', '.DS_Store', '__MACOSX'); //Array with n
 $excludefilter_string = '/(^\..*|.*~|\.gif$|\.jpg$|\.jpeg$|\.png$)/i'; //Regexp of files to exclude '/(^\..*|.*~|\.ini$)/'
 $findfiles = true; //True to read the files, false to read the folders
 $full = true; //True to return the full info about the file.
-$map_file_name = 'files_map';
-$date_format = 'Y-m-d H:i:s';
-$pager_limit = 80;
+$findremoved = true; // Whether try find the removed files when map comparasion
+$map_file_name = 'files_map'; // base name for a map file
+$date_format = 'Y-m-d H:i:s'; // The date formating in the table
+$pager_limit = 80; // How much show the files on the page
 
 //profiling
 $time_exec = array();
@@ -233,7 +234,7 @@ if ($scan && isset($_GET['hashcompare'])) {
 if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map_file)){
 	$files = unserialize($stored_data);
 	$time_exec['Open Stored'] = getmicrotime();
-} elseif (!is_file($map_file) || $scan) {
+} elseif ($scan) {
 	$files = getItems($path, $recurse, $filter, $exclude, $excludefilter_string, $findfiles, $full);
 	//keeep old file
 	renameOldFile($map_file_name, $path);
@@ -242,7 +243,7 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 }
 
 //'state' => 1.same, 2.changed, 3.new, 4.removed
-if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
+if (!empty($files) && $hashcompare && $stored_map = file_get_contents($hashcompare)) {
 	$files_old = unserialize($stored_map);
 
 	//find changed and new
@@ -259,10 +260,12 @@ if ($hashcompare && $stored_map = file_get_contents($hashcompare)) {
 	}
 	unset($f);
 	//find removed
-	foreach ($files_old as $n => $f) {
-		if (empty($files[$n])) {
-			$files[$n] = $f;
-			$files[$n]['state'] = 4;
+	if ($findremoved) {
+		foreach ($files_old as $n => $f) {
+			if (empty($files[$n])) {
+				$files[$n] = $f;
+				$files[$n]['state'] = 4;
+			}
 		}
 	}
 	$time_exec['Comparison'] = getmicrotime();
@@ -289,22 +292,22 @@ if ($pager_limit && $files_total > $pager_limit) {
 }
 
 //render table
-if($files_total) {
-	$table = '<table>';
-	//head
-	$table .= '<thead><tr>';
-	foreach ($table_head as $k => $h) {
-		$active = ($k == $sort_by);
-		$table .= '<th class="'.$k.'">'
-				. $h
-				. '&nbsp;&nbsp;'
-				. '<a href="?'.buildUrlQuery(array('sort' => $k, 'dir' => 'desc'), true).'">'.(($active && $sort_dir == SORT_DESC) ? '&#11014;' : '&uarr;').'</a>'//desc
-				. '&nbsp;'
-				. '<a href="?'.buildUrlQuery(array('sort' => $k, 'dir' => 'asc'), true).'">'.(($active && $sort_dir == SORT_ASC) ? '&#11015;' : '&darr;') .'</a>'//asc
-				.'</th>';
-	}
-	$table .= '</tr></thead>';
+$table = '<table>';
+//head
+$table .= '<thead><tr>';
+foreach ($table_head as $k => $h) {
+	$active = ($k == $sort_by);
+	$table .= '<th class="'.$k.'">'
+			. $h
+			. '&nbsp;&nbsp;'
+			. '<a href="?'.buildUrlQuery(array('sort' => $k, 'dir' => 'desc'), true).'">'.(($active && $sort_dir == SORT_DESC) ? '&#11014;' : '&uarr;').'</a>'//desc
+			. '&nbsp;'
+			. '<a href="?'.buildUrlQuery(array('sort' => $k, 'dir' => 'asc'), true).'">'.(($active && $sort_dir == SORT_ASC) ? '&#11015;' : '&darr;') .'</a>'//asc
+			.'</th>';
+}
+$table .= '</tr></thead>';
 
+if($files_total) {
 	//rows
 	$table .= '<tbody>';
 	$columns = array_keys($table_head);
@@ -334,9 +337,16 @@ if($files_total) {
 		$table .= '</tr>';
 	}
 	$table .= '</tbody>';
-	$table .= '</table>';
-
+} else {
+	$table .= '<tbody>
+	<tr>
+		<td colspan="'.count($table_head).'">
+			<p>No filemap found. Please click <a href="?'. buildUrlQuery(array('scan' => true, 'hashcompare' => ''), true).'" title="click for scan">"Scan"</a></p>
+		</td>
+	</tr>
+</tbody>';
 }
+$table .= '</table>';
 
 //render stored map files list for hashcompare
 $maps = getItems('.', false,  '('.base64_encode($path).'|'.$map_file_name.')\.map$', array(), null, true, false);
@@ -398,7 +408,7 @@ span.same{ color: #009159}
 <div id="files-table">
 <p>Files total: <?php echo $files_total;?><br />
 Base path: <?php echo realpath($path);?><br />
-<a href="?<?php echo buildUrlQuery(array('scan' => true, 'hashcompare' => ''), true); ?>">Scan again</a></p>
+<a href="?<?php echo buildUrlQuery(array('scan' => true, 'hashcompare' => ''), true); ?>" title="click for scan again">Scan again</a></p>
 <p>map file: <b><?php echo $map_file_current; ?></b>
 <?php if ($hashcompare): ?> vs <b><?php echo $hashcompare; ?></b> <?php endif; ?>
 </p>

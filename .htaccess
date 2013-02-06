@@ -1,0 +1,11 @@
+
+## No directory listing
+Options -Indexes
+
+
+## Deny access to extension .map files
+<Files ~ "\.map$">
+Order allow,deny
+Deny from all
+Satisfy all
+</Files>
