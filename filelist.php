@@ -11,13 +11,15 @@
 //base options
 
 //The path of the folder to read.
-$path = '../..';
+$path = '.';
 //True to recursively search into sub-folders, or an integer to specify the maximum depth.
-$recurse = false;
+$recurse = true;
 //A Regexp filter for allowed file names. '/./' - any
 $filter_allow = '/./';
-//Regexp of files to exclude, have biger priority than $filter_allow, applies for $fullpath
-$filter_exclude = '/(\/\..*|.*~|\.svn|\.git$|CVS|\.DS_Store|\.__MACOSX|\.gif$|\.jpg$|\.jpeg$|\.png$)/i';
+//Regexp of files to exclude, have biger priority than $filter_allow
+$filter_exclude =  '/(^\..*|.*~|\.gif$|\.jpg$|\.jpeg$|\.png$)/i';
+//Regexp of path for exclude, have biger priority than $filter_exclude
+$filter_exclude_path = '/(\/\.svn|\/\.git|\/\CVS|\/\__MACOSX)/';
 //True to read the files, false to read the folders only
 $findfiles = true;
 //Scip folders from result
@@ -45,8 +47,8 @@ function getItems(
 	$path, //The path of the folder to read.
 	$recurse = true, //True to recursively search into sub-folders, or an integer to specify the maximum depth.
 	$filter_allow = '/./', //A filter for file names.
-	//$exclude, //Array with names of files which should not be shown in the result.
 	$filter_exclude = '', //Regexp of files to exclude
+	$filter_exclude_path = '', //Regexp of path to exclude
 	$findfiles = true, //True to read the files, false to read the folders
 	$scipfolders = true //Scip folders from result
 ){
@@ -60,7 +62,7 @@ function getItems(
 
 	// use RecursiveDirectoryIterator where it possible
 	if (class_exists('RecursiveDirectoryIterator')) {
-		return _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders);
+		return _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders);
 	}
 
 	$arr = array();
@@ -74,15 +76,18 @@ function getItems(
 		// Compute the fullpath
 		$fullpath = $path . '/' . $file;
 
+		// Compute the isDir flag
+		$isDir = is_dir($fullpath);
+
 		if ($file != '.' && $file != '..'
-			&& (empty($filter_exclude) || !preg_match($filter_exclude, $fullpath))
+			&& (empty($filter_exclude_path) || !preg_match($filter_exclude_path, $fullpath))
+			//&& (empty($filter_exclude) || !(!$isDir && preg_match($filter_exclude, $file)))
+			&& (empty($filter_exclude) || !preg_match($filter_exclude, $file))
 		){
 
-
-			// Compute the isDir flag
-			$isDir = is_dir($fullpath);
-
-			if ((($isDir && !$scipfolders) || ($findfiles && !$isDir)) && preg_match($filter_allow, $file)){
+			if ((($isDir && !$scipfolders) || ($findfiles && !$isDir))
+				&& (empty($filter_allow) || preg_match($filter_allow, $file))
+			){
 
 				$stat = stat($fullpath);
 				$arr[$fullpath] = array(
@@ -109,9 +114,9 @@ function getItems(
 				// Search recursively
 				if (is_int($recurse)){
 					// Until depth 0 is reached
-					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,  $filter_exclude, $findfiles, $scipfolders));
+					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,  $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders));
 				}else{
-					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders));
+					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders));
 				}
 			}
 		}
@@ -119,27 +124,32 @@ function getItems(
 	closedir($handle);
 	return $arr;
 }
-function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders) {
+function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders) {
 	$arr = array();
 
 	$dir_it = new RecursiveDirectoryIterator($path,	RecursiveDirectoryIterator::SKIP_DOTS);
-	//Apply $filter_allow
-	if($filter_allow) {
-		$dir_it = new RecursiveRegexIterator($dir_it, $filter_allow);
-	}
 
 	$dir_it = new RecursiveIteratorIterator($dir_it,
 			RecursiveIteratorIterator::SELF_FIRST , RecursiveIteratorIterator::CATCH_GET_CHILD);
+
+	//Apply $filter_allow
+	//RegexIterator not always available .. php > 5.2
+	//if($filter_allow) {
+		//$dir_it = new RegexIterator($dir_it, $filter_allow, RegexIterator::MATCH);
+	//}
 
 	if(!$recurse) {
 		$dir_it->setMaxDepth(0);
 	}
 
 	foreach ($dir_it as $fullpath => $fileinfo) {
+		$file = pathinfo($fullpath, PATHINFO_BASENAME);
 
 		if ((!$findfiles && $fileinfo->isFile())
 			|| ($scipfolders && $fileinfo->isDir())
-			|| (!empty($filter_exclude) && preg_match($filter_exclude, $fullpath))
+			|| (!empty($filter_allow) && !preg_match($filter_allow, $file))
+			|| (!empty($filter_exclude_path) && preg_match($filter_exclude_path, $fullpath))
+			|| (!empty($filter_exclude) && preg_match($filter_exclude, $file))
 		) {
 			continue;
 		}
@@ -300,7 +310,7 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 	$files = unserialize($stored_data);
 	$time_exec['Open Stored'] = getmicrotime();
 } elseif ($scan) {
-	$files = getItems($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders);
+	$files = getItems($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders);
 	//keeep old file
 	renameOldFile($map_file_name, $path);
 	file_put_contents($map_file, serialize($files));
@@ -414,7 +424,7 @@ if($files_total) {
 $table .= '</table>';
 
 //render stored map files list for hashcompare
-$maps = getItems('.', false,  '/('.base64_encode($path).'|'.$map_file_name.')\.map$/', null, true, true);
+$maps = getItems('.', false,  '/('.base64_encode($path).'|'.$map_file_name.')\.map$/', null, null, true, true);
 rsort($maps);
 $tmp_arr = array();
 foreach ($maps as $map) {
