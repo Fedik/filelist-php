@@ -60,8 +60,8 @@ function getItems(
 		return false;
 	}
 
-	// use RecursiveDirectoryIterator where it possible
-	if (class_exists('RecursiveDirectoryIterator')) {
+	// use RecursiveDirectoryIterator where it possible, php 5.2.x partiall suport
+	if (class_exists('RecursiveDirectoryIterator')) {//version_compare(PHP_VERSION, '5.3.0', 'ge')
 		return _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders);
 	}
 
