@@ -2,7 +2,7 @@
 /**
  * Script to get list of files and file comparison
  *
- * @version		2013.02.06
+ * @version		2013.02.07
  * @author   Fedik <getthesite at gmail dot com>
  * @link    http://www.getsite.org.ua
  * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
@@ -10,17 +10,26 @@
 
 //base options
 
-$path = '.'; //The path of the folder to read.
-$recurse = true; //True to recursively search into sub-folders, or an integer to specify the maximum depth.
-$filter = '.'; //A filter for file names. Regexp.
-$exclude = array('.svn', '.git', 'CVS', '.DS_Store', '__MACOSX'); //Array with names of files which should not be shown in the result.
-$excludefilter_string = '/(^\..*|.*~|\.gif$|\.jpg$|\.jpeg$|\.png$)/i'; //Regexp of files to exclude '/(^\..*|.*~|\.ini$)/'
-$findfiles = true; //True to read the files, false to read the folders
-$full = true; //True to return the full info about the file.
-$findremoved = true; // Whether try find the removed files when map comparasion
-$map_file_name = 'files_map'; // base name for a map file
-$date_format = 'Y-m-d H:i:s'; // The date formating in the table
-$pager_limit = 80; // How much show the files on the page
+//The path of the folder to read.
+$path = '../..';
+//True to recursively search into sub-folders, or an integer to specify the maximum depth.
+$recurse = false;
+//A Regexp filter for allowed file names. '/./' - any
+$filter_allow = '/./';
+//Regexp of files to exclude, have biger priority than $filter_allow, applies for $fullpath
+$filter_exclude = '/(\/\..*|.*~|\.svn|\.git$|CVS|\.DS_Store|\.__MACOSX|\.gif$|\.jpg$|\.jpeg$|\.png$)/i';
+//True to read the files, false to read the folders only
+$findfiles = true;
+//Scip folders from result
+$scipfolders = true;
+// Whether try find the removed files when map comparasion
+$findremoved = true;
+// base name for a map file
+$map_file_name = 'files_map';
+// The date formating in the table
+$date_format = 'Y-m-d H:i:s';
+// How much show the files on the page
+$pager_limit = 80;
 
 //profiling
 $time_exec = array();
@@ -34,12 +43,12 @@ $time_exec['start'] = getmicrotime();
  */
 function getItems(
 	$path, //The path of the folder to read.
-	$recurse, //True to recursively search into sub-folders, or an integer to specify the maximum depth.
-	$filter, //A filter for file names.
-	$exclude, //Array with names of files which should not be shown in the result.
-	$excludefilter_string, //Regexp of files to exclude
-	$findfiles, //True to read the files, false to read the folders
-	$full //True to return the full path to the file.
+	$recurse = true, //True to recursively search into sub-folders, or an integer to specify the maximum depth.
+	$filter_allow = '/./', //A filter for file names.
+	//$exclude, //Array with names of files which should not be shown in the result.
+	$filter_exclude = '', //Regexp of files to exclude
+	$findfiles = true, //True to read the files, false to read the folders
+	$scipfolders = true //Scip folders from result
 ){
 	//@set_time_limit(ini_get('max_execution_time'));
 
@@ -47,6 +56,11 @@ function getItems(
 	if (!is_dir($path)){
 		echo '<b>No valid folder path</b>';
 		return false;
+	}
+
+	// use RecursiveDirectoryIterator where it possible
+	if (class_exists('RecursiveDirectoryIterator')) {
+		return _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders);
 	}
 
 	$arr = array();
@@ -57,17 +71,18 @@ function getItems(
 	}
 
 	while (($file = readdir($handle)) !== false){
-		if ($file != '.' && $file != '..' && !in_array($file, $exclude)
-			&& (empty($excludefilter_string) || !preg_match($excludefilter_string, $file))
+		// Compute the fullpath
+		$fullpath = $path . '/' . $file;
+
+		if ($file != '.' && $file != '..'
+			&& (empty($filter_exclude) || !preg_match($filter_exclude, $fullpath))
 		){
-			// Compute the fullpath
-			$fullpath = $path . '/' . $file;
+
 
 			// Compute the isDir flag
 			$isDir = is_dir($fullpath);
 
-			if (($isDir xor $findfiles) && preg_match("/$filter/", $file)){
-				// (fullpath is dir and folders are searched or fullpath is not dir and files are searched) and file matches the filter
+			if ((($isDir && !$scipfolders) || ($findfiles && !$isDir)) && preg_match($filter_allow, $file)){
 
 				$stat = stat($fullpath);
 				$arr[$fullpath] = array(
@@ -75,31 +90,81 @@ function getItems(
 					'filename' => pathinfo($file, PATHINFO_FILENAME),
 					'ext' => pathinfo($file, PATHINFO_EXTENSION),
 					'size' => $stat['size'], //size in bytes
-					'nlink' => $stat['nlink'], //number of links
+					'type' => filetype($fullpath), //file, folder, link
 					'mtime' => $stat['mtime'], //time of last modification (Unix timestamp)
 					'ctime'	=> $stat['ctime'], //time of last inode change (Unix timestamp)
 					'mode' => $stat['mode'], //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
 					'hash' => '',
 					'state' => '',//1.same;2.changed;3.new;4.removed
 				);
-
-				if ($full){
+				if (is_readable($fullpath)){
 					$arr[$fullpath]['hash'] = md5_file($fullpath);
 					//$arr[$fullpath]['hash'] = !$isDir ? sha1_file($fullpath) : '';
+				} else {
+					echo 'File not readable: '.$fullpath.'<br />';
 				}
+
 			}
 			if ($isDir && $recurse){
 				// Search recursively
 				if (is_int($recurse)){
 					// Until depth 0 is reached
-					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter,  $exclude, $excludefilter_string, $findfiles, $full));
+					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,  $filter_exclude, $findfiles, $scipfolders));
 				}else{
-					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter, $exclude, $excludefilter_string, $findfiles, $full));
+					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders));
 				}
 			}
 		}
 	}
 	closedir($handle);
+	return $arr;
+}
+function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders) {
+	$arr = array();
+
+	$dir_it = new RecursiveDirectoryIterator($path,	RecursiveDirectoryIterator::SKIP_DOTS);
+	//Apply $filter_allow
+	if($filter_allow) {
+		$dir_it = new RecursiveRegexIterator($dir_it, $filter_allow);
+	}
+
+	$dir_it = new RecursiveIteratorIterator($dir_it,
+			RecursiveIteratorIterator::SELF_FIRST , RecursiveIteratorIterator::CATCH_GET_CHILD);
+
+	if(!$recurse) {
+		$dir_it->setMaxDepth(0);
+	}
+
+	foreach ($dir_it as $fullpath => $fileinfo) {
+
+		if ((!$findfiles && $fileinfo->isFile())
+			|| ($scipfolders && $fileinfo->isDir())
+			|| (!empty($filter_exclude) && preg_match($filter_exclude, $fullpath))
+		) {
+			continue;
+		}
+
+		$arr[$fullpath] = array(
+			'path' => $fullpath,
+			'filename' => pathinfo($fullpath, PATHINFO_FILENAME),
+			'ext' => pathinfo($fullpath, PATHINFO_EXTENSION),
+			'size' => $fileinfo->getSize(), //size in bytes
+			'type' => $fileinfo->getType(), //file, folder, link
+			'mtime' => $fileinfo->getMTime(), //time of last modification (Unix timestamp)
+			'ctime'	=> $fileinfo->getCTime(), //time of last inode change (Unix timestamp)
+			'mode' => $fileinfo->getPerms(), //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
+			'hash' => '',
+			'state' => '',//1.same;2.changed;3.new;4.removed
+		);
+
+		if ($fileinfo->isReadable()){
+			$arr[$fullpath]['hash'] = md5_file($fullpath);
+			//$arr[$fullpath]['hash'] = !$isDir ? sha1_file($fullpath) : '';
+		} else {
+			echo 'File not readable: '.$fullpath.'<br />';
+		}
+	}
+
 	return $arr;
 }
 /**
@@ -201,7 +266,7 @@ $map_file_current = empty($_GET['filelist']) ? $map_file : $_GET['filelist'].'.m
 $scan = isset($_GET['scan']);
 $hashcompare = empty($_GET['hashcompare'])? false : $_GET['hashcompare'] .'.map';
 $sort_by = empty($_GET['sort']) ? 'path' :  $_GET['sort'];
-$sort_dir = empty($_GET['dir']) || $_GET['dir'] != 'asc' ? SORT_DESC : SORT_ASC;
+$sort_dir = empty($_GET['dir']) || $_GET['dir'] == 'asc' ? SORT_ASC : SORT_DESC ;
 $page = empty($_GET['page']) || $_GET['page'] == 1 ? 0 : (int)  $_GET['page'];
 
 
@@ -213,7 +278,7 @@ $table_head = array(
 	'filename' => 'File Name',
 	'ext' => 'Ext',
 	'size' => 'Size',
-	'nlink' => 'Links',
+	'type' => 'Type',
 	'mtime' => 'Last modification',
 	'ctime' => 'Last inode change',
 	'mode' => 'Permissions',
@@ -235,7 +300,7 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 	$files = unserialize($stored_data);
 	$time_exec['Open Stored'] = getmicrotime();
 } elseif ($scan) {
-	$files = getItems($path, $recurse, $filter, $exclude, $excludefilter_string, $findfiles, $full);
+	$files = getItems($path, $recurse, $filter_allow, $filter_exclude, $findfiles, $scipfolders);
 	//keeep old file
 	renameOldFile($map_file_name, $path);
 	file_put_contents($map_file, serialize($files));
@@ -349,7 +414,7 @@ if($files_total) {
 $table .= '</table>';
 
 //render stored map files list for hashcompare
-$maps = getItems('.', false,  '('.base64_encode($path).'|'.$map_file_name.')\.map$', array(), null, true, false);
+$maps = getItems('.', false,  '/('.base64_encode($path).'|'.$map_file_name.')\.map$/', null, true, true);
 rsort($maps);
 $tmp_arr = array();
 foreach ($maps as $map) {
