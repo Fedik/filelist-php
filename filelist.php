@@ -127,7 +127,7 @@ function getItems(
 function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders) {
 	$arr = array();
 
-	$dir_it = new RecursiveDirectoryIterator($path,	RecursiveDirectoryIterator::SKIP_DOTS);
+	$dir_it = new RecursiveDirectoryIterator($path);
 
 	$dir_it = new RecursiveIteratorIterator($dir_it,
 			RecursiveIteratorIterator::SELF_FIRST , RecursiveIteratorIterator::CATCH_GET_CHILD);
@@ -145,7 +145,8 @@ function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_excl
 	foreach ($dir_it as $fullpath => $fileinfo) {
 		$file = pathinfo($fullpath, PATHINFO_BASENAME);
 
-		if ((!$findfiles && $fileinfo->isFile())
+		if ($file == '.' || $file == '..'
+			|| (!$findfiles && $fileinfo->isFile())
 			|| ($scipfolders && $fileinfo->isDir())
 			|| (!empty($filter_allow) && !preg_match($filter_allow, $file))
 			|| (!empty($filter_exclude_path) && preg_match($filter_exclude_path, $fullpath))
