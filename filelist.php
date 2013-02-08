@@ -2,7 +2,7 @@
 /**
  * Script to get list of files and file comparison
  *
- * @version		2013.02.07
+ * @version		2013.02.08
  * @author   Fedik <getthesite at gmail dot com>
  * @link    http://www.getsite.org.ua
  * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
@@ -17,7 +17,7 @@ $recurse = true;
 //A Regexp filter for allowed file names. '/./' - any
 $filter_allow = '/./';
 //Regexp of files to exclude, have biger priority than $filter_allow
-$filter_exclude =  '/(^\..*|.*~|\.gif$|\.jpg$|\.jpeg$|\.png$)/i';
+$filter_exclude =  '/(\.gif$|\.jpg$|\.jpeg$|\.png$)/i';
 //Regexp of path for exclude, have biger priority than $filter_exclude
 $filter_exclude_path = '/(\/\.svn|\/\.git|\/\CVS|\/\__MACOSX)/';
 //True to read the files, false to read the folders only
