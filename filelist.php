@@ -36,6 +36,8 @@ $findremoved = true;
 // see http://www.php.net/manual/en/function.hash-algos.php
 // false - for disable,
 $counthash = 'md5';
+// Allow file download
+$download = false;
 // base name for a map file
 $map_file_name = 'files_map';
 // The date formating in the table
@@ -131,7 +133,7 @@ function getItems(
 					$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 				} else {
 					//echo 'File not readable: '.$fullpath.'<br />';
-					$about_file['hash'] = 'Not Redable!';
+					$about_file['hash'] = 'Not Readable!';
 				}
 
 				$arr[$fullpath] = $about_file;
@@ -214,7 +216,7 @@ function _getItemsDirectoryIterator($path, $recurse, $filter_allow,
 			$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 		} else {
 			//echo 'File not readable: '.$fullpath.'<br />';
-			$about_file['hash'] = 'Not Redable!';
+			$about_file['hash'] = 'Not Readable!';
 		}
 
 		$arr[$fullpath] = $about_file;
@@ -294,6 +296,46 @@ function stateFormat($state) {
 	return '<span class="'.$title.'">'.$title.'</span>';
 }
 /**
+ * Link to file, for allow download
+ * @param string $full_path path to the file
+ * @return string HTML link
+ */
+function linkToFile($full_path){
+	return '<a href="?download='. base64_encode($full_path) . '" target="_blank">'
+			. $full_path . '</a>';
+}
+/**
+ * Download file method
+ * @param string base64_encode file path
+ */
+function downloadFile($file){
+	$file_path = realpath(base64_decode($file));
+
+	if(!$file_path || !is_file($file_path) || !is_readable($file_path)){
+		echo 'File "'.$file_path.'" not available!';
+		exit;
+	}
+
+	//mime
+	$finfo = finfo_open(FILEINFO_MIME_TYPE);
+	$mime = finfo_file($finfo, $file_path);
+
+	//send to user
+	header('Content-Description: File Transfer');
+	header('Content-Type: '.$mime);
+	header('Content-Disposition: attachment; filename="'.pathinfo($file_path, PATHINFO_BASENAME).'"');
+	header('Content-Transfer-Encoding: binary');
+	header('Expires: 0');
+	header('Cache-Control: must-revalidate');
+	header('Pragma: public');
+	header('Content-Length: ' . filesize($file_path));
+	ob_clean();
+	flush();
+	readfile($file_path);
+	exit;
+}
+
+/**
  * build query
  * @return new query array or query string
  */
@@ -314,6 +356,10 @@ function getmicrotime(){
 	return ((float) $usec + (float) $sec);
 }
 
+// check download request
+if(!empty($_GET['download']) && $download){
+	downloadFile($_GET['download']);
+}
 // init variables
 $files = array();
 $map_file = $map_file_name . '.map';
@@ -449,6 +495,9 @@ if($files_total) {
 					break;
 				case 'state':
 					$table .= '<td>'.stateFormat($file[$col]).'</td>';
+					break;
+				case 'path':
+					$table .= '<td>'. ( $download ? linkToFile($file[$col]) : $file[$col]) .'</td>';
 					break;
 				default:
 					$table .= '<td>'.$file[$col].'</td>';;
