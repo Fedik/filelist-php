@@ -2,11 +2,15 @@
 /**
  * Script to get list of files and file comparison
  *
- * @version		2013.02.08
+ * @version		2014.04.28
  * @author   Fedik <getthesite at gmail dot com>
  * @link    http://www.getsite.org.ua
  * @license	GNU/GPL http://www.gnu.org/licenses/gpl.html
  */
+
+// Enable error reaporting, in case fault
+error_reporting(E_ALL);
+ini_set('display_errors', 'On');
 
 //base options
 
@@ -26,6 +30,12 @@ $findfiles = true;
 $scipfolders = true;
 // Whether try find the removed files when map comparasion
 $findremoved = true;
+// Method for count HASH of each file, for compare in future
+// Important for make $findremoved work, but can cause a error on big files
+// Possible values: 'md5', 'sha256', 'haval160,4', 'sha1', 'crc32' ...
+// see http://www.php.net/manual/en/function.hash-algos.php
+// false - for disable,
+$counthash = 'md5';
 // base name for a map file
 $map_file_name = 'files_map';
 // The date formating in the table
@@ -50,7 +60,8 @@ function getItems(
 	$filter_exclude = '', //Regexp of files to exclude
 	$filter_exclude_path = '', //Regexp of path to exclude
 	$findfiles = true, //True to read the files, false to read the folders
-	$scipfolders = true //Scip folders from result
+	$scipfolders = true, //Scip folders from result
+	$counthash = false // Method used for count file hash, false - for disable
 ){
 	//@set_time_limit(ini_get('max_execution_time'));
 
@@ -62,7 +73,8 @@ function getItems(
 
 	// use RecursiveDirectoryIterator where it possible, php 5.2.x partiall suport
 	if (class_exists('RecursiveDirectoryIterator')) {//version_compare(PHP_VERSION, '5.3.0', 'ge')
-		return _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders);
+		return _getItemsDirectoryIterator($path, $recurse, $filter_allow,
+				$filter_exclude, $filter_exclude_path, $findfiles, $scipfolders, $counthash);
 	}
 
 	$arr = array();
@@ -81,7 +93,6 @@ function getItems(
 
 		if ($file != '.' && $file != '..'
 			&& (empty($filter_exclude_path) || !preg_match($filter_exclude_path, $fullpath))
-			//&& (empty($filter_exclude) || !(!$isDir && preg_match($filter_exclude, $file)))
 			&& (empty($filter_exclude) || !preg_match($filter_exclude, $file))
 		){
 
@@ -103,8 +114,7 @@ function getItems(
 					'state' => '',//1.same;2.changed;3.new;4.removed
 				);
 				if (is_readable($fullpath)){
-					$arr[$fullpath]['hash'] = md5_file($fullpath);
-					//$arr[$fullpath]['hash'] = !$isDir ? sha1_file($fullpath) : '';
+					$arr[$fullpath]['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 				} else {
 					echo 'File not readable: '.$fullpath.'<br />';
 				}
@@ -114,9 +124,11 @@ function getItems(
 				// Search recursively
 				if (is_int($recurse)){
 					// Until depth 0 is reached
-					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,  $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders));
+					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,
+							$filter_exclude, $filter_exclude_path, $findfiles, $scipfolders, $counthash));
 				}else{
-					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders));
+					$arr = array_merge($arr, getItems($fullpath, $recurse, $filter_allow,
+							$filter_exclude, $filter_exclude_path, $findfiles, $scipfolders, $counthash));
 				}
 			}
 		}
@@ -124,7 +136,8 @@ function getItems(
 	closedir($handle);
 	return $arr;
 }
-function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders) {
+function _getItemsDirectoryIterator($path, $recurse, $filter_allow,
+		$filter_exclude, $filter_exclude_path, $findfiles, $scipfolders, $counthash) {
 	$arr = array();
 
 	$dir_it = new RecursiveDirectoryIterator($path);
@@ -169,8 +182,7 @@ function _getItemsDirectoryIterator($path, $recurse, $filter_allow, $filter_excl
 		);
 
 		if ($fileinfo->isReadable()){
-			$arr[$fullpath]['hash'] = md5_file($fullpath);
-			//$arr[$fullpath]['hash'] = !$isDir ? sha1_file($fullpath) : '';
+			$arr[$fullpath]['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 		} else {
 			echo 'File not readable: '.$fullpath.'<br />';
 		}
@@ -311,7 +323,8 @@ if(is_file($map_file_current) && !$scan && $stored_data = file_get_contents($map
 	$files = unserialize($stored_data);
 	$time_exec['Open Stored'] = getmicrotime();
 } elseif ($scan) {
-	$files = getItems($path, $recurse, $filter_allow, $filter_exclude, $filter_exclude_path, $findfiles, $scipfolders);
+	$files = getItems($path, $recurse, $filter_allow, $filter_exclude,
+			$filter_exclude_path, $findfiles, $scipfolders, $counthash);
 	//keeep old file
 	renameOldFile($map_file_name, $path);
 	file_put_contents($map_file, serialize($files));
