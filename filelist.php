@@ -100,28 +100,44 @@ function getItems(
 				&& (empty($filter_allow) || preg_match($filter_allow, $file))
 			){
 
-				$stat = stat($fullpath);
-				$arr[$fullpath] = array(
-					'path' => $fullpath,
-					'filename' => pathinfo($file, PATHINFO_FILENAME),
-					'ext' => pathinfo($file, PATHINFO_EXTENSION),
-					'size' => $stat['size'], //size in bytes
-					'type' => filetype($fullpath), //file, folder, link
-					'mtime' => $stat['mtime'], //time of last modification (Unix timestamp)
-					'ctime'	=> $stat['ctime'], //time of last inode change (Unix timestamp)
-					'mode' => $stat['mode'], //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
+				$about_file = array(
+					'path' => '',
+					'filename' => '',
+					'ext' => '',
+					'size' => 0, //size in bytes
+					'type' => '', //file, folder, link
+					'mtime' => '', //time of last modification (Unix timestamp)
+					'ctime'	=> '', //time of last inode change (Unix timestamp)
+					'mode' => '', //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
 					'hash' => '',
 					'state' => '',//1.same;2.changed;3.new;4.removed
 				);
+
+				$about_file['path'] = $fullpath;
+				$about_file['filename'] = pathinfo($file, PATHINFO_FILENAME);
+				$about_file['ext'] = pathinfo($file, PATHINFO_EXTENSION);
+				$about_file['type'] = filetype($fullpath);
+
+				if($about_file['type'] != 'link'){
+					$stat = stat($fullpath);
+
+					$about_file['size'] = $stat['size'];
+					$about_file['mtime'] = $stat['mtime'];
+					$about_file['ctime'] = $stat['ctime'];
+					$about_file['mode'] = $stat['mode'];
+				}
+
 				if (is_readable($fullpath)){
-					$arr[$fullpath]['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
+					$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 				} else {
 					echo 'File not readable: '.$fullpath.'<br />';
 				}
 
+				$arr[$fullpath] = $about_file;
 			}
+
+			// Search recursively
 			if ($isDir && $recurse){
-				// Search recursively
 				if (is_int($recurse)){
 					// Until depth 0 is reached
 					$arr = array_merge($arr, getItems($fullpath,  $recurse - 1, $filter_allow,
@@ -156,36 +172,50 @@ function _getItemsDirectoryIterator($path, $recurse, $filter_allow,
 	}
 
 	foreach ($dir_it as $fullpath => $fileinfo) {
-		$file = pathinfo($fullpath, PATHINFO_BASENAME);
+		$file = pathinfo($fullpath);
 
-		if ($file == '.' || $file == '..'
+		if ($file['basename'] == '.' || $file['basename'] == '..'
 			|| (!$findfiles && $fileinfo->isFile())
 			|| ($scipfolders && $fileinfo->isDir())
-			|| (!empty($filter_allow) && !preg_match($filter_allow, $file))
+			|| (!empty($filter_allow) && !preg_match($filter_allow, $file['basename']))
 			|| (!empty($filter_exclude_path) && preg_match($filter_exclude_path, $fullpath))
-			|| (!empty($filter_exclude) && preg_match($filter_exclude, $file))
+			|| (!empty($filter_exclude) && preg_match($filter_exclude, $file['basename']))
 		) {
 			continue;
 		}
 
-		$arr[$fullpath] = array(
-			'path' => $fullpath,
-			'filename' => pathinfo($fullpath, PATHINFO_FILENAME),
-			'ext' => pathinfo($fullpath, PATHINFO_EXTENSION),
-			'size' => $fileinfo->getSize(), //size in bytes
-			'type' => $fileinfo->getType(), //file, folder, link
-			'mtime' => $fileinfo->getMTime(), //time of last modification (Unix timestamp)
-			'ctime'	=> $fileinfo->getCTime(), //time of last inode change (Unix timestamp)
-			'mode' => $fileinfo->getPerms(), //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
+		$about_file = array(
+			'path' => '',
+			'filename' => '',
+			'ext' => '',
+			'size' => 0, //size in bytes
+			'type' => '', //file, folder, link
+			'mtime' => '', //time of last modification (Unix timestamp)
+			'ctime'	=> '', //time of last inode change (Unix timestamp)
+			'mode' => '', //inode protection mode, permissions , base_convert($file_info['mode'],10,8);
 			'hash' => '',
 			'state' => '',//1.same;2.changed;3.new;4.removed
 		);
 
+		$about_file['path'] = $fullpath;
+		$about_file['filename'] = $file['filename'];
+		$about_file['ext'] = isset($file['extension']) ? $file['extension'] : '';
+		$about_file['type'] = $fileinfo->getType();
+
+		if($about_file['type'] != 'link'){
+			$about_file['size'] = $fileinfo->getSize();
+			$about_file['mtime'] = $fileinfo->getMTime();
+			$about_file['ctime'] = $fileinfo->getCTime();
+			$about_file['mode'] = $fileinfo->getPerms();
+		}
+
 		if ($fileinfo->isReadable()){
-			$arr[$fullpath]['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
+			$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 		} else {
 			echo 'File not readable: '.$fullpath.'<br />';
 		}
+
+		$arr[$fullpath] = $about_file;
 	}
 
 	return $arr;
@@ -409,7 +439,7 @@ if($files_total) {
 					break;
 				case 'mtime':
 				case 'ctime':
-					$table .= '<td>'.date($date_format, $file[$col]).'</td>';
+					$table .= '<td>'. ($file[$col] ? date($date_format, $file[$col]) : '') .'</td>';
 					break;
 				case 'mode':
 					$table .= '<td>'.base_convert($file[$col],10,8).'</td>';
