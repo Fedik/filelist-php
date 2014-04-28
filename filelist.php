@@ -130,7 +130,8 @@ function getItems(
 				if (is_readable($fullpath)){
 					$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 				} else {
-					echo 'File not readable: '.$fullpath.'<br />';
+					//echo 'File not readable: '.$fullpath.'<br />';
+					$about_file['hash'] = 'Not Redable!';
 				}
 
 				$arr[$fullpath] = $about_file;
@@ -212,7 +213,8 @@ function _getItemsDirectoryIterator($path, $recurse, $filter_allow,
 		if ($fileinfo->isReadable()){
 			$about_file['hash'] = $counthash ? hash_file($counthash, $fullpath) : '';
 		} else {
-			echo 'File not readable: '.$fullpath.'<br />';
+			//echo 'File not readable: '.$fullpath.'<br />';
+			$about_file['hash'] = 'Not Redable!';
 		}
 
 		$arr[$fullpath] = $about_file;
@@ -335,7 +337,8 @@ $table_head = array(
 	'mtime' => 'Last modification',
 	'ctime' => 'Last inode change',
 	'mode' => 'Permissions',
-	'state' => 'File state'
+	'state' => 'File state',
+	'hash' => 'Hash (' . (string) $counthash . ')',
 );
 
 //prepare base URL query
