@@ -37,7 +37,7 @@ $findremoved = true;
 // false - for disable,
 $counthash = 'md5';
 // Allow file download
-$download = false;
+$download = true;
 // base name for a map file
 $map_file_name = 'files_map';
 // The date formating in the table
